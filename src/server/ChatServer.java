@@ -4,6 +4,8 @@ import server.exception.InvalidUsernameException;
 import server.exception.UsernameTakenException;
 
 import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.net.*;
 import java.util.HashMap;
 
@@ -31,10 +33,11 @@ public class ChatServer {
         }
     }
 
-    public ClientInfo addClient(String username, Socket clientSocket) throws InvalidUsernameException, UsernameTakenException, IOException {
+    public ClientInfo addClient(String username, ObjectInputStream objectInputStream, ObjectOutputStream objectOutputStream)
+            throws InvalidUsernameException, UsernameTakenException, IOException {
         synchronized (clients) {
             validateUsername(username);
-            ClientInfo client = new ClientInfo(username, clientSocket);
+            ClientInfo client = new ClientInfo(username, objectInputStream, objectOutputStream);
             return clients.put(username, client);
         }
     }

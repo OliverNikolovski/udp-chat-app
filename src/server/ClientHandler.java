@@ -1,13 +1,11 @@
 package server;
 
+import dto.Message;
 import server.exception.InvalidCommandException;
 import server.exception.InvalidUsernameException;
 import server.exception.UsernameTakenException;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
+import java.io.*;
 import java.net.Socket;
 
 public class ClientHandler implements Runnable {
@@ -26,61 +24,67 @@ public class ClientHandler implements Runnable {
     private static final String RECEIVING_USER_DOES_NOT_EXIST = "%s is not logged in.";
 
     private final Socket socket;
-    private final BufferedReader bufferedReader;
-    private final PrintWriter printWriter;
+    private final ObjectOutputStream objectOutputStream;
+    private final ObjectInputStream objectInputStream;
     private final ChatServer chatServer;
     private ClientInfo client;
 
     public ClientHandler(Socket socket, ChatServer chatServer) throws IOException {
         this.socket = socket;
-        this.bufferedReader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-        this.printWriter = new PrintWriter(socket.getOutputStream());
+        this.objectOutputStream = new ObjectOutputStream(socket.getOutputStream());
+        this.objectInputStream = new ObjectInputStream(socket.getInputStream());
         this.chatServer = chatServer;
     }
 
     @Override
     public void run() {
-        String command;
         try {
-            while ((command = bufferedReader.readLine()) != null) {
-                Command commandType = getCommandType(command);
+            while (!this.socket.isClosed()) {
+                Message message = (Message) objectInputStream.readObject();
+                Command commandType = getCommandType(message.getContent());
                 switch (commandType) {
-                    case LOGIN -> handleLoginCommand(command);
-                    case LIST -> handleListCommand(command);
-                    case SEND_MESSAGE -> handleSendMessageCommand(command);
-                    case EXIT -> handleExitCommand(command);
+                    case LOGIN -> handleLoginCommand(message);
+                    case LIST -> handleListCommand(message);
+                    case SEND_MESSAGE -> handleSendMessageCommand(message);
+                    case EXIT -> handleExitCommand(message);
                 }
             }
         }
         catch (Exception ex) {
-            this.sendErrorMessage(ex.getMessage());
+            try {
+                this.sendErrorMessage(ex.getMessage());
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
             this.closeEverything();
         }
     }
 
-    private void handleLoginCommand(String command) throws InvalidUsernameException, UsernameTakenException, IOException {
-        String[] parts = this.splitCommand(command);
-        this.client = this.chatServer.addClient(parts[1], this.socket);
-        this.printWriter.println(SUCCESSFUL_LOGIN_MESSAGE);
-        this.printWriter.flush();
+    private void handleLoginCommand(Message command) throws InvalidUsernameException, UsernameTakenException, IOException {
+        String[] parts = this.splitCommand(command.getContent());
+        this.client = this.chatServer.addClient(parts[1], this.objectInputStream, this.objectOutputStream);
+        Message message = createMessage(SUCCESSFUL_LOGIN_MESSAGE);
+        this.objectOutputStream.writeObject(message);
+        this.objectOutputStream.flush();
     }
 
-    private void handleListCommand(String command) {
-        String username = this.splitCommand(command)[0];
+    private void handleListCommand(Message command) throws IOException {
+        String username = command.getSenderUsername();
         if (!this.chatServer.isLoggedIn(username)) {
             this.sendMessageForUnauthenticatedUser();
             return;
         }
         String loggedInUsers = String.join(", ", this.chatServer.getClients().keySet());
-        this.printWriter.println(loggedInUsers);
-        this.printWriter.flush();
+        Message message = createMessage(loggedInUsers);
+        this.objectOutputStream.writeObject(message);
+        this.objectOutputStream.flush();
     }
 
-    private void handleSendMessageCommand(String command) {
-        String[] parts = this.splitCommand(command);
-        String fromUser = parts[0];
-        String toUser = parts[2];
-        String message = parts[3];
+    private void handleSendMessageCommand(Message command) throws IOException {
+        String[] contentParts = this.splitCommand(command.getContent());
+        String fromUser = command.getSenderUsername();
+        String toUser = contentParts[1];
+        String message = contentParts[2];
         if (!this.chatServer.isLoggedIn(fromUser)) {
             this.sendMessageForUnauthenticatedUser();
             return;
@@ -90,36 +94,37 @@ public class ClientHandler implements Runnable {
             return;
         }
         ClientInfo receiver = this.chatServer.getClients().get(toUser);
-        PrintWriter pw = receiver.getPrintWriter();
-        String response = "message:" + fromUser + ":" + message;
-        pw.println(response);
-        pw.flush();
+        ObjectOutputStream objectOutputStream = receiver.getObjectOutputStream();
+        objectOutputStream.writeObject(new Message(command.getSenderUsername(), message));
+        objectOutputStream.flush();
     }
 
-    private void handleExitCommand(String command) {
-        String username = this.splitCommand(command)[0];
+    private void handleExitCommand(Message command) throws IOException {
+        String username = command.getSenderUsername();
         if (!chatServer.isLoggedIn(username)) {
             this.sendMessageForUnauthenticatedUser();
             return;
         }
         this.chatServer.removeClient(username);
-        this.printWriter.println(SUCCESSFUL_LOGOUT_MESSAGE);
-        this.printWriter.flush();
+        this.objectOutputStream.writeObject(createMessage(SUCCESSFUL_LOGOUT_MESSAGE));
+        this.objectOutputStream.flush();
+        this.closeEverything();
     }
 
-    private void sendMessageForUnauthenticatedUser() {
-        this.printWriter.println(NOT_AUTHENTICATED_MESSAGE);
-        this.printWriter.flush();
+    private void sendMessageForUnauthenticatedUser() throws IOException {
+        this.objectOutputStream.writeObject(createMessage(NOT_AUTHENTICATED_MESSAGE));
+        this.objectOutputStream.flush();
     }
 
-    private void sendMessageForNotLoggedInReceivingUser(String username) {
-        this.printWriter.println(String.format(RECEIVING_USER_DOES_NOT_EXIST, username));
-        this.printWriter.flush();
+    private void sendMessageForNotLoggedInReceivingUser(String username) throws IOException {
+        String msg = String.format(RECEIVING_USER_DOES_NOT_EXIST, username);
+        this.objectOutputStream.writeObject(createMessage(msg));
+        this.objectOutputStream.flush();
     }
 
-    private void sendErrorMessage(String message) {
-        this.printWriter.println(message);
-        this.printWriter.flush();
+    private void sendErrorMessage(String message) throws IOException {
+        this.objectOutputStream.writeObject(createMessage(message));
+        this.objectOutputStream.flush();
     }
 
     private String[] splitCommand(String command) {
@@ -130,26 +135,30 @@ public class ClientHandler implements Runnable {
         String[] parts = command.split(COMMAND_PARTS_SEPARATOR);
         if (parts[0].equals("login") && parts.length == 2)
             return Command.LOGIN;
-        else if (parts[1].equals("list") && parts.length == 2)
+        else if (parts[0].equals("list") && parts.length == 1)
             return Command.LIST;
-        else if (parts[1].equals("message") && parts.length == 4)
+        else if (parts[0].equals("message") && parts.length == 3)
             return Command.SEND_MESSAGE;
-        else if (parts[1].equals("exit") && parts.length == 2)
+        else if (parts[0].equals("exit") && parts.length == 1)
             return Command.EXIT;
         else
             throw new InvalidCommandException("Invalid command");
     }
 
+    private Message createMessage(String content) {
+        return new Message("Server", content);
+    }
+
     private void closeEverything() {
-        printWriter.close();
-        if (client != null)
-            client.closeSocket();
-        if (bufferedReader != null) {
-            try {
-                bufferedReader.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+        try {
+            objectOutputStream.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        try {
+            objectInputStream.close();
+        } catch (IOException e) {
+            e.printStackTrace();
         }
         if (socket != null) {
             try {
@@ -159,5 +168,7 @@ public class ClientHandler implements Runnable {
                 e.printStackTrace();
             }
         }
+        if (client != null)
+            client.closeSocket();
     }
 }
