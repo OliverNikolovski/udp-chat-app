@@ -9,11 +9,11 @@ import java.util.HashMap;
 
 public class ChatServer {
 
-    private final HashMap<String, SocketAddress> clients;
-    private final DatagramSocket socket;
+    private final HashMap<String, ClientInfo> clients;
+    private final ServerSocket serverSocket;
 
-    public ChatServer(InetAddress address, int port) throws SocketException {
-        this.socket = new DatagramSocket(port, address);
+    public ChatServer(int port) throws IOException {
+        this.serverSocket = new ServerSocket(port);
         this.clients = new HashMap<>();
     }
 
@@ -21,10 +21,9 @@ public class ChatServer {
         System.out.println("Server up and running...");
         try {
             while (true) {
-                byte[] buffer = new byte[1024];
-                DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
-                socket.receive(packet);
-                new Thread(new MessageHandler(packet, this)).start();
+                var socket = this.serverSocket.accept();
+                System.out.println("Client has connected to the server.");
+                new Thread(new ClientHandler(socket, this)).start();
             }
         } catch (IOException e) {
             System.err.println(e.getMessage());
@@ -32,10 +31,11 @@ public class ChatServer {
         }
     }
 
-    public void addClient(String username, SocketAddress socketAddress) throws InvalidUsernameException, UsernameTakenException {
+    public ClientInfo addClient(String username, Socket clientSocket) throws InvalidUsernameException, UsernameTakenException, IOException {
         synchronized (clients) {
             validateUsername(username);
-            clients.put(username, socketAddress);
+            ClientInfo client = new ClientInfo(username, clientSocket);
+            return clients.put(username, client);
         }
     }
 
@@ -49,15 +49,7 @@ public class ChatServer {
         return this.clients.containsKey(username);
     }
 
-    public SocketAddress getSocketAddressForUser(String username) {
-        return this.clients.get(username);
-    }
-
-    public DatagramSocket getSocket() {
-        return socket;
-    }
-
-    public HashMap<String, SocketAddress> getClients() {
+    public HashMap<String, ClientInfo> getClients() {
         return clients;
     }
 
@@ -76,10 +68,9 @@ public class ChatServer {
         return this.clients.containsKey(username);
     }
 
-    public static void main(String[] args) throws SocketException, UnknownHostException {
-        var address = InetAddress.getByName("localhost");
+    public static void main(String[] args) throws IOException {
         var port = 4567;
-        var chatServer = new ChatServer(address, port);
+        var chatServer = new ChatServer(port);
         chatServer.startServer();
     }
 }

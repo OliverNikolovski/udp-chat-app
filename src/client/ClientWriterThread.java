@@ -3,19 +3,20 @@ package client;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.PrintWriter;
 import java.net.*;
+import java.util.Objects;
 
-public class ClientPacketSender extends Thread {
+public class ClientWriterThread extends Thread {
 
-    private final DatagramSocket socket;
-    private final SocketAddress serverSocketAddress;
-    private final ThreadManager threadManager;
+    private final Socket socket;
+    private final PrintWriter printWriter;
     private String username;
 
-    public ClientPacketSender(DatagramSocket socket, InetAddress serverAddress, int serverPort, ThreadManager threadManager) {
+    public ClientWriterThread(Socket socket) throws IOException {
+        Objects.requireNonNull(socket);
         this.socket = socket;
-        this.serverSocketAddress = new InetSocketAddress(serverAddress, serverPort);
-        this.threadManager = threadManager;
+        this.printWriter = new PrintWriter(socket.getOutputStream(), true);
     }
 
     @Override
@@ -23,23 +24,18 @@ public class ClientPacketSender extends Thread {
         BufferedReader br = new BufferedReader(new InputStreamReader(System.in));
         String messageToSend;
         try {
-            while ((messageToSend = br.readLine()) != null && !isInterrupted()) {
-                DatagramPacket datagramPacket;
-                byte[] buffer;
+            while ((messageToSend = br.readLine()) != null) {
                 // if the command is login, then send the command as is
                 // if it's other command, then prepend the client's name to the command
                 // for the server to be able to check if this client is logged in or not
                 // and to be able to display the sender client's name at the receiver client's terminal when a message is sent
                 if (messageToSend.startsWith("login:")) {
                     this.username = messageToSend.split(":")[1];
-                    buffer = messageToSend.getBytes();
-                    datagramPacket = new DatagramPacket(buffer, buffer.length, this.serverSocketAddress);
-                    this.socket.send(datagramPacket);
+                    this.printWriter.println(messageToSend);
                     continue;
                 }
-                buffer = (this.username + ":" + messageToSend).getBytes();
-                datagramPacket = new DatagramPacket(buffer, buffer.length, this.serverSocketAddress);
-                this.socket.send(datagramPacket);
+                messageToSend = this.username + ":" + messageToSend;
+                this.printWriter.println(messageToSend);
             }
         }
         catch (IOException e) {
@@ -51,8 +47,14 @@ public class ClientPacketSender extends Thread {
             } catch (IOException e) {
                 e.printStackTrace();
             }
-            threadManager.stopThreads();
+            try {
+                socket.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
     }
+
+
 
 }

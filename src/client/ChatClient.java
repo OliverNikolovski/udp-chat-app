@@ -1,16 +1,15 @@
 package client;
 
+import java.io.IOException;
 import java.net.*;
 
 public class ChatClient {
-    public static void main(String[] args) throws UnknownHostException, SocketException {
+    public static void main(String[] args) throws IOException {
         InetAddress serverAddress = InetAddress.getByName("localhost");
         int serverPort = 4567;
-        DatagramSocket datagramSocket = new DatagramSocket();
-        ThreadManager threadManager = new ThreadManager();
-        Thread t1 = new ClientPacketReceiver(datagramSocket, threadManager);
-        Thread t2 = new ClientPacketSender(datagramSocket, serverAddress, serverPort, threadManager);
-        threadManager.addThreads(t1, t2);
+        Socket socket = new Socket(serverAddress, serverPort);
+        Thread t1 = new ClientReaderThread(socket);
+        Thread t2 = new ClientWriterThread(socket);
         t1.start();
         t2.start();
     }
