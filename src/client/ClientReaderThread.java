@@ -1,11 +1,13 @@
 package client;
 
-import dto.Message;
+import model.Client;
+import model.Message;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.net.Socket;
-import java.util.Objects;
+import java.util.*;
+import java.util.stream.Collectors;
 
 public class ClientReaderThread extends Thread {
 
@@ -23,8 +25,21 @@ public class ClientReaderThread extends Thread {
         System.out.println("Client up and running...");
         try {
             while (!socket.isClosed()) {
-                Message message = (Message) objectInputStream.readObject();
-                System.out.println(message);
+                Object data = objectInputStream.readObject();
+                if (Message.class.isAssignableFrom(data.getClass())) { // message is send
+                    Message message = (Message) data;
+                    System.out.println(message);
+                }
+                else {  // array of logged in clients is sent
+                    Client[] clients = (Client[]) data;
+                    String joinedClientUsernames =
+                            Arrays.stream(clients)
+                            .reduce(new StringJoiner(", "),
+                                    (stringJoiner, client) -> stringJoiner.add(client.getUsername()),
+                                    StringJoiner::merge)
+                            .toString();
+                    System.out.println(joinedClientUsernames);
+                }
             }
         } catch (Exception e) {
             e.printStackTrace();

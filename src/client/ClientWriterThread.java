@@ -1,6 +1,6 @@
 package client;
 
-import dto.Message;
+import model.Message;
 
 import java.io.*;
 import java.net.*;
@@ -26,9 +26,6 @@ public class ClientWriterThread extends Thread {
             while ((input = br.readLine()) != null) {
                 if (input.startsWith("login:")) {
                     this.username = input.split(":")[1];
-                    this.objectOutputStream.writeObject(new Message("", input));
-                    this.objectOutputStream.flush();
-                    continue;
                 }
                 Message message = new Message(this.username, input);
                 this.objectOutputStream.writeObject(message);

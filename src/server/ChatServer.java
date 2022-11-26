@@ -1,5 +1,6 @@
 package server;
 
+import model.Client;
 import server.exception.InvalidUsernameException;
 import server.exception.UsernameTakenException;
 
@@ -11,7 +12,7 @@ import java.util.HashMap;
 
 public class ChatServer {
 
-    private final HashMap<String, ClientInfo> clients;
+    private final HashMap<String, Client> clients;
     private final ServerSocket serverSocket;
 
     public ChatServer(int port) throws IOException {
@@ -33,11 +34,11 @@ public class ChatServer {
         }
     }
 
-    public ClientInfo addClient(String username, ObjectInputStream objectInputStream, ObjectOutputStream objectOutputStream)
+    public Client addClient(String username, ObjectInputStream objectInputStream, ObjectOutputStream objectOutputStream)
             throws InvalidUsernameException, UsernameTakenException, IOException {
         synchronized (clients) {
             validateUsername(username);
-            ClientInfo client = new ClientInfo(username, objectInputStream, objectOutputStream);
+            Client client = new Client(username, objectInputStream, objectOutputStream);
             return clients.put(username, client);
         }
     }
@@ -52,7 +53,7 @@ public class ChatServer {
         return this.clients.containsKey(username);
     }
 
-    public HashMap<String, ClientInfo> getClients() {
+    public HashMap<String, Client> getClients() {
         return clients;
     }
 

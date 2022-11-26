@@ -1,6 +1,7 @@
 package server;
 
-import dto.Message;
+import model.Client;
+import model.Message;
 import server.exception.InvalidCommandException;
 import server.exception.InvalidUsernameException;
 import server.exception.UsernameTakenException;
@@ -27,7 +28,7 @@ public class ClientHandler implements Runnable {
     private final ObjectOutputStream objectOutputStream;
     private final ObjectInputStream objectInputStream;
     private final ChatServer chatServer;
-    private ClientInfo client;
+    private Client client;
 
     public ClientHandler(Socket socket, ChatServer chatServer) throws IOException {
         this.socket = socket;
@@ -74,9 +75,8 @@ public class ClientHandler implements Runnable {
             this.sendMessageForUnauthenticatedUser();
             return;
         }
-        String loggedInUsers = String.join(", ", this.chatServer.getClients().keySet());
-        Message message = createMessage(loggedInUsers);
-        this.objectOutputStream.writeObject(message);
+        Client[] clients = this.chatServer.getClients().values().toArray(new Client[0]);
+        this.objectOutputStream.writeObject(clients);
         this.objectOutputStream.flush();
     }
 
@@ -93,7 +93,7 @@ public class ClientHandler implements Runnable {
             this.sendMessageForNotLoggedInReceivingUser(toUser);
             return;
         }
-        ClientInfo receiver = this.chatServer.getClients().get(toUser);
+        Client receiver = this.chatServer.getClients().get(toUser);
         ObjectOutputStream objectOutputStream = receiver.getObjectOutputStream();
         objectOutputStream.writeObject(new Message(command.getSenderUsername(), message));
         objectOutputStream.flush();

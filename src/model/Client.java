@@ -1,14 +1,16 @@
-package server;
+package model;
 
 import java.io.*;
 import java.util.Objects;
 
-public class ClientInfo {
-    private final String username;
-    private final ObjectOutputStream objectOutputStream;
-    private final ObjectInputStream objectInputStream;
+public class Client implements Serializable {
+    private String username;
+    private transient ObjectOutputStream objectOutputStream;
+    private transient ObjectInputStream objectInputStream;
 
-    public ClientInfo(String username, ObjectInputStream objectInputStream, ObjectOutputStream objectOutputStream) {
+    public Client() {}
+
+    public Client(String username, ObjectInputStream objectInputStream, ObjectOutputStream objectOutputStream) {
         Objects.requireNonNull(username);
         Objects.requireNonNull(objectInputStream);
         Objects.requireNonNull(objectOutputStream);
@@ -29,6 +31,18 @@ public class ClientInfo {
         return username;
     }
 
+    public void setUsername(String username) {
+        this.username = username;
+    }
+
+    public void setObjectOutputStream(ObjectOutputStream objectOutputStream) {
+        this.objectOutputStream = objectOutputStream;
+    }
+
+    public void setObjectInputStream(ObjectInputStream objectInputStream) {
+        this.objectInputStream = objectInputStream;
+    }
+
     public void closeSocket() {
         try {
             objectOutputStream.close();
@@ -40,5 +54,10 @@ public class ClientInfo {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    @Override
+    public String toString() {
+        return username;
     }
 }
